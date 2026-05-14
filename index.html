@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simplified GPU video transform + effects + output</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        color: #e8e8e8;
+        background: #1a1a1a;
+      }
+      body {
+        max-width: 980px;
+        margin: 1rem auto;
+        padding: 0 1rem;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #000;
+        border: 1px solid #333;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 0.6rem 1rem;
+        margin: 0.75rem 0;
+        align-items: center;
+      }
+      label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        font-size: 0.88rem;
+      }
+      label input[type='range'] {
+        flex: 1;
+        min-width: 80px;
+      }
+      #status {
+        font-size: 0.9rem;
+        color: #9cf;
+        white-space: pre-wrap;
+      }
+      video {
+        display: none;
+      }
+      .file-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: center;
+        margin: 0.75rem 0;
+      }
+      .mirror-row {
+        display: none;
+        gap: 1rem;
+        margin: 0.25rem 0 0.5rem;
+      }
+      select {
+        background: #2a2a2a;
+        color: #eee;
+        border: 1px solid #444;
+        padding: 0.25rem 0.5rem;
+      }
+      .scopes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+      }
+      .scopes figure {
+        margin: 0;
+      }
+      .scopes figcaption {
+        font-size: 0.8rem;
+        color: #aaa;
+        margin-bottom: 0.35rem;
+      }
+      .scopes canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #0a0a0a;
+        border: 1px solid #333;
+      }
+      .motion-readout {
+        font-size: 0.88rem;
+        color: #9c9;
+        margin: 0.5rem 0 0.75rem;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Simplified GPU pipeline (parity)</h1>
+    <p>
+      Same shader sources as the main app: <code>copy-external</code> → <code>video-transform</code> (straight alpha) → optional
+      modular GPU effects (<code>src/effects/</code> per-effect WGSL + <code>common.wgsl</code>, see <code>EffectsPipeline</code>) → <code>output.wgsl</code> (<code>OutputPipeline</code>). Fixed canvas 960×540.
+    </p>
+    <div class="file-row">
+      <input type="file" id="file" accept="video/*" />
+      <label>
+        Output
+        <select id="outputMode">
+          <option value="normal" selected>Normal (over black)</option>
+          <option value="grid">Transparency grid</option>
+          <option value="stackedAlpha">Stacked alpha preview</option>
+        </select>
+      </label>
+      <label>
+        Effect
+        <select id="effectType">
+          <option value="none" selected>None</option>
+          <option value="hue-shift">Hue shift</option>
+          <option value="brightness">Brightness</option>
+          <option value="contrast">Contrast</option>
+          <option value="saturation">Saturation</option>
+          <option value="pixelate">Pixelate</option>
+          <option value="kaleidoscope">Kaleidoscope</option>
+          <option value="mirror">Mirror</option>
+          <option value="rgb-split">RGB split</option>
+          <option value="invert">Invert</option>
+          <option value="levels">Levels</option>
+          <option value="box-blur">Box blur</option>
+        </select>
+      </label>
+    </div>
+    <div class="mirror-row">
+      <label><input type="checkbox" id="mirrorH" /> Mirror horizontal</label>
+      <label><input type="checkbox" id="mirrorV" /> Mirror vertical</label>
+    </div>
+    <div class="controls effect-params">
+      <label>
+        <span id="paramALabel">Param A</span>
+        <input type="range" id="paramA" min="0" max="1" step="0.01" value="0.15" />
+        <span id="paramAVal">0</span>
+      </label>
+      <label>
+        <span id="paramBLabel">Param B</span>
+        <input type="range" id="paramB" min="0" max="1" step="0.01" value="0" />
+        <span id="paramBVal">0</span>
+      </label>
+      <label>
+        <span id="paramCLabel">Param C</span>
+        <input type="range" id="paramC" min="0.3" max="3" step="0.05" value="1" />
+        <span id="paramCVal">1</span>
+      </label>
+    </div>
+    <div class="controls">
+      <label>Opacity <input type="range" id="opacity" min="0" max="1" step="0.01" value="1" /> <span id="opacityVal">1</span></label>
+      <label>Pos X <input type="range" id="posX" min="-1" max="1" step="0.005" value="0" /> <span id="posXVal">0</span></label>
+      <label>Pos Y <input type="range" id="posY" min="-1" max="1" step="0.005" value="0" /> <span id="posYVal">0</span></label>
+      <label>Pos Z <input type="range" id="posZ" min="-2" max="2" step="0.01" value="0" /> <span id="posZVal">0</span></label>
+      <label>Scale X <input type="range" id="scaleX" min="0.25" max="3" step="0.01" value="1" /> <span id="scaleXVal">1</span></label>
+      <label>Scale Y <input type="range" id="scaleY" min="0.25" max="3" step="0.01" value="1" /> <span id="scaleYVal">1</span></label>
+      <label>Rot X° <input type="range" id="rotX" min="-90" max="90" step="1" value="0" /> <span id="rotXVal">0</span></label>
+      <label>Rot Y° <input type="range" id="rotY" min="-90" max="90" step="1" value="0" /> <span id="rotYVal">0</span></label>
+      <label>Rot Z° <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" /> <span id="rotZVal">0</span></label>
+      <label>Perspective <input type="range" id="perspective" min="0.5" max="10" step="0.05" value="2" /> <span id="perspectiveVal">2</span></label>
+    </div>
+    <canvas id="canvas" width="960" height="540"></canvas>
+    <section class="scopes" aria-label="Video scopes">
+      <figure>
+        <figcaption>Histogram (GPU, BT.709 luma + RGB)</figcaption>
+        <canvas id="scopeHistogram" width="320" height="180"></canvas>
+      </figure>
+      <figure>
+        <figcaption>Waveform (GPU, RGB parade)</figcaption>
+        <canvas id="scopeWaveform" width="320" height="180"></canvas>
+      </figure>
+      <figure>
+        <figcaption>Vectorscope (GPU, BT.709 Cb/Cr)</figcaption>
+        <canvas id="scopeVectorscope" width="320" height="180"></canvas>
+      </figure>
+    </section>
+    <p id="motion" class="motion-readout" aria-live="polite">
+      Optical flow: waiting for frames…
+    </p>
+    <video id="video" playsinline muted></video>
+    <p id="status">Initializing…</p>
+    <p style="font-size: 0.85rem; color: #888">
+      Scopes read the post-effects, post-transform texture (see <code>simplified/src/analysis/</code>). Optical flow uses the same <code>opticalflow.wgsl</code> as the main app, downsampled to 160×90 for speed.
+      Stacked alpha matches <code>output.wgsl</code> mode 2 (vertically stacked RGB/α; single-layer demos may look split).
+    </p>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
