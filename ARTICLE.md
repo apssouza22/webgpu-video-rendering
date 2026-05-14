@@ -4,22 +4,17 @@
 
 A single 4K frame has more than 8 million pixels. At 60 frames per second, the system is looking at almost 500 million pixels per second before blur, color correction, transforms, scopes, motion analysis, or export enter the picture. Asking JavaScript to pull those pixels into CPU memory, process them one by one, and push them back to the GPU is a bad bargain.
 
-This project takes a different route: decode the video in the browser, hand each frame to WebGPU, and keep the expensive work on the GPU for as long as possible.
+The project this article is based on takes a different route: decode the video in the browser, hand each frame to WebGPU, and keep the expensive work on the GPU for as long as possible.
 
 The result is a local-first video processing lab built around WebCodecs and WebGPU. It plays a video file in the browser, imports each decoded frame into a GPU pipeline, applies heavy processing with WGSL shaders, renders a live preview, and can also run GPU-backed analysis such as histogram, waveform, vectorscope, and optical flow.
+
+You can try the demo at [apssouza22.github.io/webgpu-video-processing](https://apssouza22.github.io/webgpu-video-processing) and explore the source code on [GitHub](https://github.com/apssouza22/webgpu-video-processing).
 
 ## Why CPU-first video processing breaks down
 
 The simplest browser video processing pipeline usually looks something like this:
 
-```mermaid
-flowchart LR
-  Video[Video element] --> Canvas2D[Canvas 2D]
-  Canvas2D --> ImageData[getImageData]
-  ImageData --> JS[JavaScript pixel loop]
-  JS --> PutImageData[putImageData]
-  PutImageData --> Preview[Preview canvas]
-```
+![CPU-first browser video pipeline](https://raw.githubusercontent.com/apssouza22/webgpu-video-processing/main/docs/diagrams/cpu-first-pipeline.drawio.png)
 
 That approach is easy to understand. It is also the wrong shape for serious video work.
 
@@ -29,22 +24,11 @@ The cost is not only the math. The copies hurt too. Every time a full frame is p
 
 ## The project pipeline
 
-This project uses WebCodecs and WebGPU together. WebCodecs gives the app decoded `VideoFrame` objects. WebGPU turns those frames into GPU input with `GPUDevice.importExternalTexture({ source: videoFrame })`.
+The demo project uses WebCodecs and WebGPU together. WebCodecs gives the app decoded `VideoFrame` objects. WebGPU turns those frames into GPU input with `GPUDevice.importExternalTexture({ source: videoFrame })`.
 
 From there, the frame is normalized into an internal `rgba8unorm` texture. That internal texture becomes the stable input for transforms, effects, analysis passes, and the final preview.
 
-```mermaid
-flowchart LR
-  File[Local video file] --> BrowserDecode[Browser decode / WebCodecs]
-  BrowserDecode --> Frame[VideoFrame]
-  Frame --> External[GPUExternalTexture]
-  External --> WorkTexture[Internal rgba8unorm GPU texture]
-  WorkTexture --> Transform[3D transform pass]
-  Transform --> Effects[WGSL effect passes]
-  Effects --> Output[WebGPU canvas preview]
-  Effects --> Scopes[Histogram / waveform / vectorscope]
-  Effects --> Motion[Optical flow analysis]
-```
+![WebCodecs to WebGPU project pipeline](https://raw.githubusercontent.com/apssouza22/webgpu-video-processing/main/docs/diagrams/webgpu-project-pipeline.drawio.png)
 
 The important part is what is missing from that diagram: there is no `getImageData()`, no `readPixels()`, and no full-frame CPU readback on the main preview path.
 
@@ -58,14 +42,7 @@ For video processing, this changes the shape of the application.
 
 The CPU still runs the app. It handles UI controls, file selection, frame scheduling, uniforms, and small analysis results. The GPU does the frame work: sampling textures, transforming pixels, chaining effects, drawing previews, and running compute passes.
 
-```mermaid
-flowchart TB
-  CPU[CPU: UI, scheduling, uniforms] --> Commands[WebGPU command encoder]
-  Commands --> GPU[GPU: texture passes and compute work]
-  GPU --> Preview[Preview canvas]
-  GPU --> Stats[Small statistics buffers]
-  Stats --> CPU
-```
+![CPU and GPU work split in the WebGPU video pipeline](https://raw.githubusercontent.com/apssouza22/webgpu-video-processing/main/docs/diagrams/cpu-gpu-work-split.drawio.png)
 
 That split is the difference between "JavaScript edits video" and "JavaScript orchestrates a GPU video pipeline."
 
@@ -137,16 +114,7 @@ Real effects add uniforms and more math. A blur pass samples neighboring pixels.
 
 GPU render passes cannot safely read from and write to the same texture in the same pass. The project uses a ping-pong pair to chain effects.
 
-```mermaid
-flowchart LR
-  Input[Input texture] --> Effect1[Effect pass 1]
-  Effect1 --> Ping[Ping texture]
-  Ping --> Effect2[Effect pass 2]
-  Effect2 --> Pong[Pong texture]
-  Pong --> Effect3[Effect pass 3]
-  Effect3 --> PingAgain[Ping texture again]
-  PingAgain --> Final[Final output]
-```
+![Ping-pong textures for GPU effect chains](https://raw.githubusercontent.com/apssouza22/webgpu-video-processing/main/docs/diagrams/ping-pong-effect-chain.drawio.png)
 
 The code swaps the input and output view after each enabled effect:
 
@@ -201,18 +169,7 @@ These are also image-wide operations. A histogram needs to inspect many pixels. 
 
 The optical flow pipeline is a good example. It uses compute shaders for grayscale conversion, pyramid downsampling, spatial gradients, temporal gradients, Lucas-Kanade flow, and final statistics.
 
-```mermaid
-flowchart LR
-  Current[Current GPU frame] --> Gray[Grayscale compute]
-  Previous[Previous GPU frame] --> GrayPrev[Previous grayscale]
-  Gray --> Pyramid[Gaussian pyramid]
-  GrayPrev --> PyramidPrev[Previous pyramid]
-  Pyramid --> Gradients[Spatial + temporal gradients]
-  PyramidPrev --> Gradients
-  Gradients --> Flow[Lucas-Kanade flow]
-  Flow --> Stats[Motion statistics]
-  Stats --> CPU[Small CPU readback]
-```
+![Optical flow compute pipeline](https://raw.githubusercontent.com/apssouza22/webgpu-video-processing/main/docs/diagrams/optical-flow-compute-pipeline.drawio.png)
 
 The CPU does receive some data here, but it is compact: motion totals, global motion, local motion, and scene-cut hints. It does not need the whole frame back.
 
@@ -222,7 +179,7 @@ The browser is already good at distribution. No installer, no native build, no p
 
 WebGPU changes that. It gives browser apps access to the same class of hardware that native video tools rely on, while still keeping the browser workflow.
 
-This project uses that to process local video with:
+The demo uses that to process local video with:
 
 - GPU-backed frame import from `VideoFrame`
 - Internal GPU textures for predictable downstream processing
