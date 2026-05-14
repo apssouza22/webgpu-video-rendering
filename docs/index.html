@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Local video in the browser through a WebGPU pipeline: WebCodecs frames, 3D transform, WGSL effects, compositing, and GPU scopes."
+    />
+    <title>WebGPU video lab · transform, effects &amp; scopes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0c0e12;
+        --bg-elevated: #12151c;
+        --surface: #161b24;
+        --surface-hover: #1c2330;
+        --border: rgba(148, 163, 184, 0.12);
+        --border-strong: rgba(148, 163, 184, 0.22);
+        --text: #eceff4;
+        --text-muted: #94a3b8;
+        --accent: #22d3ee;
+        --accent-soft: rgba(34, 211, 238, 0.14);
+        --accent-text: #a5f3fc;
+        --radius: 14px;
+        --radius-sm: 10px;
+        --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+        color-scheme: dark;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-sans);
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--text);
+        background: var(--bg);
+        background-image:
+          radial-gradient(ellipse 120% 80% at 50% -30%, rgba(34, 211, 238, 0.08), transparent 55%),
+          radial-gradient(ellipse 60% 40% at 100% 50%, rgba(99, 102, 241, 0.06), transparent 50%);
+      }
+
+      .page {
+        max-width: 1560px;
+        margin: 0 auto;
+        padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 3vw, 1.75rem) 3rem;
+      }
+
+      /* —— Header —— */
+      .hero {
+        margin-bottom: 1.75rem;
+      }
+
+      .hero-top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent-text);
+        background: var(--accent-soft);
+        border: 1px solid rgba(34, 211, 238, 0.25);
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        margin-bottom: 0.65rem;
+      }
+
+      .hero h1 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.55rem, 4vw, 2rem);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        max-width: 20ch;
+      }
+
+      .hero-lead {
+        margin: 0;
+        max-width: 52ch;
+        color: var(--text-muted);
+        font-size: 0.97rem;
+      }
+
+      .hero-lead code {
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        color: var(--accent-text);
+        background: var(--surface);
+        padding: 0.12em 0.4em;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+      }
+
+      .tech-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        justify-content: flex-end;
+        align-self: center;
+      }
+
+      .tech-badges span {
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+        padding: 0.35rem 0.55rem;
+        border-radius: 8px;
+      }
+
+      /* —— Layout —— */
+      .main-grid {
+        display: grid;
+        gap: 1.25rem;
+        align-items: start;
+      }
+
+      @media (min-width: 960px) {
+        .main-grid {
+          grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+        }
+      }
+
+      .preview-column {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        min-width: 0;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .card-header h2 {
+        margin: 0;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .preview-body {
+        padding: 0;
+        background: #000;
+      }
+
+      #canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        vertical-align: middle;
+        background: #000;
+      }
+
+      .status-bar {
+        margin: 0;
+        padding: 0.75rem 1rem;
+        font-size: 0.82rem;
+        color: var(--accent-text);
+        background: linear-gradient(90deg, rgba(34, 211, 238, 0.12), transparent);
+        border-top: 1px solid var(--border);
+        font-family: var(--font-mono);
+        white-space: pre-wrap;
+        min-height: 2.75rem;
+      }
+
+      .perf-hud {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+        gap: 0.45rem 1rem;
+        padding: 0.65rem 1rem 0.75rem;
+        border-top: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.28);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        color: var(--text-muted);
+      }
+
+      .perf-item {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 0.25rem 0.4rem;
+        min-width: 0;
+      }
+
+      .perf-item abbr {
+        cursor: help;
+        text-decoration: underline dotted;
+        text-underline-offset: 2px;
+        font-weight: 500;
+        color: var(--text-muted);
+      }
+
+      .perf-item strong {
+        font-weight: 600;
+        color: var(--accent-text);
+      }
+
+      .perf-unit {
+        font-size: 0.68rem;
+        opacity: 0.85;
+      }
+
+      .perf-res {
+        grid-column: 1 / -1;
+      }
+
+      @media (min-width: 640px) {
+        .perf-res {
+          grid-column: auto;
+        }
+      }
+
+      aside.panel {
+        position: relative;
+      }
+
+      @media (min-width: 960px) {
+        aside.panel {
+          position: sticky;
+          top: 1rem;
+          max-height: calc(100vh - 2rem);
+          overflow-y: auto;
+        }
+      }
+
+      .panel-inner {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.15rem;
+      }
+
+      .control-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+      }
+
+      .control-block > h3 {
+        margin: 0;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--text-muted);
+      }
+
+      .file-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+      }
+
+      @media (min-width: 520px) {
+        .file-row {
+          flex-direction: row;
+          flex-wrap: wrap;
+          align-items: flex-end;
+        }
+      }
+
+      input[type='file'] {
+        width: 100%;
+        max-width: 100%;
+        font-family: var(--font-sans);
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      input[type='file']::file-selector-button {
+        margin-right: 0.75rem;
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 0.82rem;
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-strong);
+        background: var(--bg-elevated);
+        color: var(--text);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+      }
+
+      input[type='file']::file-selector-button:hover {
+        background: var(--surface-hover);
+        border-color: rgba(34, 211, 238, 0.35);
+      }
+
+      .field-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        min-width: 0;
+      }
+
+      .field-row label {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--text-muted);
+      }
+
+      select {
+        width: 100%;
+        font-family: var(--font-sans);
+        font-size: 0.88rem;
+        padding: 0.5rem 0.65rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-strong);
+        background: var(--bg-elevated);
+        color: var(--text);
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.65rem center;
+        padding-right: 2rem;
+      }
+
+      select:focus {
+        outline: 2px solid rgba(34, 211, 238, 0.45);
+        outline-offset: 1px;
+      }
+
+      .select-grid {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      @media (min-width: 400px) {
+        .select-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .mirror-row {
+        display: none;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.25rem;
+        padding: 0.5rem 0.65rem;
+        background: var(--bg-elevated);
+        border-radius: var(--radius-sm);
+        border: 1px dashed var(--border-strong);
+      }
+
+      .mirror-row label {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.84rem;
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      .controls {
+        display: grid;
+        gap: 0.55rem 0.75rem;
+        margin: 0;
+      }
+
+      .controls label {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        gap: 0.3rem 0.65rem;
+        align-items: center;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .controls label > span:first-of-type {
+        font-weight: 500;
+      }
+
+      .controls label input[type='range'] {
+        grid-column: 1 / -1;
+        width: 100%;
+        height: 6px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .controls label > span:last-of-type {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--accent-text);
+        text-align: right;
+        min-width: 2.75rem;
+      }
+
+      input[type='checkbox'] {
+        width: 1rem;
+        height: 1rem;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      /* —— Scopes —— */
+      .scopes-section {
+        margin-top: 0;
+        container-type: inline-size;
+        container-name: scopes;
+      }
+
+      .scopes-section > h2 {
+        margin: 0 0 0.75rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .scopes {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+
+      @container scopes (min-width: 34rem) {
+        .scopes {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @container scopes (min-width: 48rem) {
+        .scopes {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      .scopes figure {
+        margin: 0;
+        padding: 0.75rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+
+      .scopes figcaption {
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
+      }
+
+      .scopes canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: var(--radius-sm);
+        background: #050608;
+        border: 1px solid var(--border);
+      }
+
+      .motion-panel {
+        margin-top: 1rem;
+        padding: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      .motion-panel--idle .motion-metrics,
+      .motion-panel--idle .motion-sparkline-wrap,
+      .motion-panel--idle .motion-panel-meta,
+      .motion-panel--idle .motion-scene-cut {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+
+      .motion-panel-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .motion-panel-title {
+        margin: 0;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .motion-panel-meta {
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        color: var(--text-muted);
+      }
+
+      .motion-scene-cut {
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #fbbf24;
+        background: rgba(251, 191, 36, 0.12);
+        border: 1px solid rgba(251, 191, 36, 0.35);
+        padding: 0.2rem 0.45rem;
+        border-radius: 6px;
+      }
+
+      .motion-panel-status {
+        margin: 0;
+        padding: 0.65rem 1rem;
+        font-size: 0.8rem;
+        font-family: var(--font-mono);
+        color: var(--accent-text);
+        background: rgba(34, 211, 238, 0.06);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .motion-panel-status[hidden] {
+        display: none;
+      }
+
+      .motion-metrics {
+        padding: 0.85rem 1rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+      }
+
+      .motion-metric-label {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.65rem;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        margin-bottom: 0.35rem;
+      }
+
+      .motion-metric-title-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        min-width: 0;
+      }
+
+      .motion-metric-name {
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .motion-metric-desc {
+        font-size: 0.68rem;
+        line-height: 1.4;
+        color: var(--text-muted);
+        font-weight: 400;
+      }
+
+      .motion-metric-val {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: var(--text);
+        min-width: 2.5rem;
+        text-align: right;
+      }
+
+      .motion-track {
+        height: 8px;
+        border-radius: 999px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        overflow: hidden;
+      }
+
+      .motion-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        transition: width 140ms ease-out;
+      }
+
+      .motion-fill-total {
+        background: linear-gradient(90deg, #06b6d4, #22d3ee);
+      }
+
+      .motion-fill-global {
+        background: linear-gradient(90deg, #6366f1, #818cf8);
+      }
+
+      .motion-fill-local {
+        background: linear-gradient(90deg, #d97706, #fbbf24);
+      }
+
+      .motion-sparkline-wrap {
+        padding: 0 1rem 0.85rem;
+      }
+
+      .motion-sparkline-label {
+        display: block;
+        font-size: 0.65rem;
+        font-weight: 500;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 0.35rem;
+      }
+
+      #motionSparkline {
+        display: block;
+        width: 100%;
+        height: 56px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+      }
+
+      video {
+        display: none;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-CvoHPxWu.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div class="hero-top">
+          <div>
+            <span class="eyebrow">Browser · WebGPU + WebCodecs</span>
+            <h1>Real-time video on the GPU</h1>
+            <p class="hero-lead">
+              Load a local file and run it through a small render graph:
+              <code>VideoFrame</code> → copy → 3D transform (straight alpha) → optional WGSL effects → compositing.
+              Live histogram, waveform, and vectorscope read the same post-effect image; optical flow adds a motion panel with smoothed meters and history.
+            </p>
+          </div>
+          <div class="tech-badges" aria-hidden="true">
+            <span>WGSL</span>
+            <span>960×540</span>
+            <span>importExternalTexture</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="main-grid">
+        <div class="preview-column">
+          <section class="card preview-card" aria-label="Preview">
+            <div class="card-header">
+              <h2>Preview</h2>
+            </div>
+            <div class="preview-body">
+              <canvas id="canvas" width="960" height="540"></canvas>
+            </div>
+            <p id="status" class="status-bar" role="status">Initializing…</p>
+            <div class="perf-hud" id="perfHud" aria-label="WebGPU video processing performance">
+              <div class="perf-item">
+                <abbr title="Frames per second, from elapsed time between GPU queue-idle points (preview + scopes)">FPS</abbr>
+                <strong id="perfFps">—</strong>
+              </div>
+              <div class="perf-item">
+                <abbr title="Wall time until the GPU finishes submitted work: main preview pipeline plus histogram, waveform, and vectorscope passes">GPU</abbr>
+                <strong id="perfGpuMs">—</strong>
+                <span class="perf-unit">ms</span>
+              </div>
+              <div class="perf-item">
+                <abbr title="CPU time to create an ImageBitmap for optical flow (shown only when optical flow is enabled)">Prep</abbr>
+                <strong id="perfPrepMs">—</strong>
+                <span class="perf-unit">ms</span>
+              </div>
+              <div class="perf-item perf-res">
+                <abbr title="Preview canvas resolution, then source video frame size (decoded pixels)">Size</abbr>
+                <strong id="perfRes">—</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="scopes-section">
+            <h2>Scopes · post-effects image</h2>
+            <div class="scopes" aria-label="Video scopes">
+              <figure>
+                <figcaption>Histogram — GPU, BT.709 luma + RGB</figcaption>
+                <canvas id="scopeHistogram" width="320" height="180"></canvas>
+              </figure>
+              <figure>
+                <figcaption>Waveform — GPU, RGB parade</figcaption>
+                <canvas id="scopeWaveform" width="320" height="180"></canvas>
+              </figure>
+              <figure>
+                <figcaption>Vectorscope — GPU, BT.709 Cb/Cr</figcaption>
+                <canvas id="scopeVectorscope" width="320" height="180"></canvas>
+              </figure>
+            </div>
+            <section class="motion-panel motion-panel--idle" id="motionPanel" aria-label="Optical flow" role="region">
+              <div class="motion-panel-header">
+                <h3 class="motion-panel-title">Optical flow</h3>
+                <span class="motion-panel-meta">GPU · Lucas–Kanade · 160×90 · smoothed</span>
+                <span class="motion-scene-cut" id="motionSceneCut" hidden>Scene cut</span>
+              </div>
+              <p class="motion-panel-status" id="motionStatus" aria-live="polite">Waiting for video frames…</p>
+              <div class="motion-metrics">
+                <div
+                  class="motion-metric"
+                  role="group"
+                  aria-label="Total motion"
+                  aria-describedby="motion-desc-total"
+                >
+                  <div class="motion-metric-label">
+                    <span class="motion-metric-title-block">
+                      <span class="motion-metric-name">Total</span>
+                      <span id="motion-desc-total" class="motion-metric-desc">Average movement between frames across the whole picture (flow strength).</span>
+                    </span>
+                    <span class="motion-metric-val" data-flow-val="total">0%</span>
+                  </div>
+                  <div class="motion-track">
+                    <div class="motion-fill motion-fill-total" data-flow-fill="total"></div>
+                  </div>
+                </div>
+                <div
+                  class="motion-metric"
+                  role="group"
+                  aria-label="Global motion"
+                  aria-describedby="motion-desc-global"
+                >
+                  <div class="motion-metric-label">
+                    <span class="motion-metric-title-block">
+                      <span class="motion-metric-name">Global</span>
+                      <span id="motion-desc-global" class="motion-metric-desc">Camera-like motion: most flow vectors point the same way (pans, tilts, zooms).</span>
+                    </span>
+                    <span class="motion-metric-val" data-flow-val="global">0%</span>
+                  </div>
+                  <div class="motion-track">
+                    <div class="motion-fill motion-fill-global" data-flow-fill="global"></div>
+                  </div>
+                </div>
+                <div
+                  class="motion-metric"
+                  role="group"
+                  aria-label="Local motion"
+                  aria-describedby="motion-desc-local"
+                >
+                  <div class="motion-metric-label">
+                    <span class="motion-metric-title-block">
+                      <span class="motion-metric-name">Local</span>
+                      <span id="motion-desc-local" class="motion-metric-desc">Object motion: vectors point in different directions from the overall shift (moving subjects).</span>
+                    </span>
+                    <span class="motion-metric-val" data-flow-val="local">0%</span>
+                  </div>
+                  <div class="motion-track">
+                    <div class="motion-fill motion-fill-local" data-flow-fill="local"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="motion-sparkline-wrap">
+                <span class="motion-sparkline-label">Total motion over time</span>
+                <canvas id="motionSparkline" width="320" height="56" aria-hidden="true"></canvas>
+              </div>
+            </section>
+            <video id="video" playsinline muted loop></video>
+          </section>
+        </div>
+
+        <aside class="card panel" aria-label="Controls">
+          <div class="card-header">
+            <h2>Controls</h2>
+          </div>
+          <div class="panel-inner">
+            <div class="control-block">
+              <h3>Source &amp; look</h3>
+              <div class="file-row">
+                <input type="file" id="file" accept="video/*" />
+              </div>
+              <div class="select-grid">
+                <div class="field-row">
+                  <label for="outputMode">Output compositing</label>
+                  <select id="outputMode">
+                    <option value="normal" selected>Normal (over black)</option>
+                    <option value="grid">Transparency grid</option>
+                    <option value="stackedAlpha">Stacked alpha preview</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <label for="effectType">Effect</label>
+                  <select id="effectType">
+                    <option value="none" selected>None</option>
+                    <option value="hue-shift">Hue shift</option>
+                    <option value="brightness">Brightness</option>
+                    <option value="contrast">Contrast</option>
+                    <option value="saturation">Saturation</option>
+                    <option value="pixelate">Pixelate</option>
+                    <option value="kaleidoscope">Kaleidoscope</option>
+                    <option value="mirror">Mirror</option>
+                    <option value="rgb-split">RGB split</option>
+                    <option value="invert">Invert</option>
+                    <option value="levels">Levels</option>
+                    <option value="box-blur">Box blur</option>
+                  </select>
+                </div>
+              </div>
+              <div class="mirror-row">
+                <label><input type="checkbox" id="mirrorH" /> Mirror horizontal</label>
+                <label><input type="checkbox" id="mirrorV" /> Mirror vertical</label>
+              </div>
+            </div>
+
+            <div class="control-block">
+              <h3>Effect parameters</h3>
+              <div class="controls effect-params">
+                <label>
+                  <span id="paramALabel">Param A</span>
+                  <input type="range" id="paramA" min="0" max="1" step="0.01" value="0.15" />
+                  <span id="paramAVal">0</span>
+                </label>
+                <label>
+                  <span id="paramBLabel">Param B</span>
+                  <input type="range" id="paramB" min="0" max="1" step="0.01" value="0" />
+                  <span id="paramBVal">0</span>
+                </label>
+                <label>
+                  <span id="paramCLabel">Param C</span>
+                  <input type="range" id="paramC" min="0.3" max="3" step="0.05" value="1" />
+                  <span id="paramCVal">1</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="control-block">
+              <h3>Transform layer</h3>
+              <div class="controls">
+                <label><span>Opacity</span><input type="range" id="opacity" min="0" max="1" step="0.01" value="1" /><span id="opacityVal">1</span></label>
+                <label><span>Pos X</span><input type="range" id="posX" min="-1" max="1" step="0.005" value="0" /><span id="posXVal">0</span></label>
+                <label><span>Pos Y</span><input type="range" id="posY" min="-1" max="1" step="0.005" value="0" /><span id="posYVal">0</span></label>
+                <label><span>Pos Z</span><input type="range" id="posZ" min="-2" max="2" step="0.01" value="0" /><span id="posZVal">0</span></label>
+                <label><span>Scale X</span><input type="range" id="scaleX" min="0.25" max="3" step="0.01" value="1" /><span id="scaleXVal">1</span></label>
+                <label><span>Scale Y</span><input type="range" id="scaleY" min="0.25" max="3" step="0.01" value="1" /><span id="scaleYVal">1</span></label>
+                <label><span>Rot X°</span><input type="range" id="rotX" min="-90" max="90" step="1" value="0" /><span id="rotXVal">0</span></label>
+                <label><span>Rot Y°</span><input type="range" id="rotY" min="-90" max="90" step="1" value="0" /><span id="rotYVal">0</span></label>
+                <label><span>Rot Z°</span><input type="range" id="rotZ" min="-180" max="180" step="1" value="0" /><span id="rotZVal">0</span></label>
+                <label><span>Perspective</span><input type="range" id="perspective" min="0.5" max="10" step="0.05" value="2" /><span id="perspectiveVal">2</span></label>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </body>
+</html>
