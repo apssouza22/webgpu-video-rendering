@@ -2,7 +2,7 @@ import type {
   FrameRenderOptions,
   VideoFrameRenderer,
 } from './VideoFrameRenderer';
-import type {MotionResult, OpticalFlowAnalyzer} from './analysis';
+import type {MotionFlowVisualization, MotionResult, OpticalFlowAnalyzer} from './analysis';
 import {DemoEffectParams, DemoEffectType} from "./types";
 import {VideoTransformLayerParams} from "./TransformPipeline";
 
@@ -44,8 +44,8 @@ export interface TransformDemoDom {
   paramCLabel: HTMLSpanElement;
   paramCInput: HTMLInputElement;
   paramCVal: HTMLSpanElement;
-  /** Live optical flow readout (optional) */
-  motionEl?: HTMLParagraphElement;
+  /** Optical flow UI (optional) */
+  motionViz?: MotionFlowVisualization;
 }
 
 function degToRad(d: number): number {
@@ -293,14 +293,7 @@ export class DemoApp {
   }
 
   private setMotionReadout(m: MotionResult): void {
-    const el = this.dom.motionEl;
-    if (!el) {
-      return;
-    }
-    const t = (x: number) => (x * 100).toFixed(0);
-    el.textContent =
-        `Optical flow (GPU, Lucas–Kanade pyramid): total ${t(m.total)}% · global ${t(m.global)}% · local ${t(m.local)}%` +
-        (m.isSceneCut ? ' · scene cut?' : '');
+    this.dom.motionViz?.update(m);
   }
 
   start(): void {
@@ -357,6 +350,7 @@ export class DemoApp {
     }
     this.renderer.releaseWorkTextures();
     this.opticalFlow?.reset();
+    this.dom.motionViz?.reset();
     this.currentObjectUrl = URL.createObjectURL(file);
     this.dom.video.src = this.currentObjectUrl;
   }
@@ -402,10 +396,7 @@ export class DemoApp {
       try {
         flowBitmap = await createImageBitmap(frame);
       } catch (e) {
-        const el = this.dom.motionEl;
-        if (el) {
-          el.textContent = `Optical flow: createImageBitmap failed (${e})`;
-        }
+        this.dom.motionViz?.setError(`createImageBitmap failed: ${e}`);
       }
     }
 
@@ -421,10 +412,7 @@ export class DemoApp {
               .analyzeFrame(bmp)
               .then((m) => this.setMotionReadout(m))
               .catch((e) => {
-                const el = this.dom.motionEl;
-                if (el) {
-                  el.textContent = `Optical flow error: ${e}`;
-                }
+                this.dom.motionViz?.setError(`Analysis error: ${e}`);
               })
               .finally(() => bmp.close());
         }

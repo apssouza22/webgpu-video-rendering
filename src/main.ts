@@ -1,4 +1,5 @@
 import { DemoApp } from './DemoApp';
+import { MotionFlowVisualization } from './analysis/MotionFlowVisualization';
 import { OpticalFlowAnalyzer } from './analysis/OpticalFlowAnalyzer';
 import { VideoFrameRenderer } from './VideoFrameRenderer';
 
@@ -50,7 +51,8 @@ const rotZInput = document.querySelector<HTMLInputElement>('#rotZ')!;
 const rotZVal = document.querySelector<HTMLSpanElement>('#rotZVal')!;
 const perspectiveInput = document.querySelector<HTMLInputElement>('#perspective')!;
 const perspectiveVal = document.querySelector<HTMLSpanElement>('#perspectiveVal')!;
-const motionEl = document.querySelector<HTMLParagraphElement>('#motion')!;
+const motionPanel = document.querySelector<HTMLElement>('#motionPanel');
+const motionViz = motionPanel ? new MotionFlowVisualization(motionPanel) : undefined;
 
 if (!navigator.gpu) {
   statusEl.textContent =
@@ -67,7 +69,7 @@ const renderer = await VideoFrameRenderer.create(canvas, {
 const opticalFlow = new OpticalFlowAnalyzer(renderer.device);
 const flowReady = await opticalFlow.initialize();
 if (!flowReady) {
-  motionEl.textContent = 'Optical flow: GPU initialization failed (check the console).';
+  motionViz?.setError('Optical flow: GPU initialization failed (check the console).');
 }
 
 const app = new DemoApp(renderer, {
@@ -108,6 +110,6 @@ const app = new DemoApp(renderer, {
   paramCLabel,
   paramCInput,
   paramCVal,
-  motionEl,
+  motionViz,
 }, flowReady ? opticalFlow : null);
 app.start();

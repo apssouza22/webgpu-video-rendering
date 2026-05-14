@@ -1,6 +1,6 @@
 import {EffectsPipeline} from './EffectsPipeline';
 import {OutputPipeline} from './OutputPipeline';
-import {CopyPipeline} from './CopyPipeline';
+import {ExternalCopyPipeline} from './ExternalCopyPipeline';
 import {TransformPipeline, type VideoTransformLayerParams} from './TransformPipeline';
 import {DemoEffectParams, DemoEffectType, PingPongTexturePair} from "./types";
 import {ScopeRenderer} from './analysis';
@@ -39,7 +39,7 @@ export class VideoFrameRenderer {
   private canvasHeight = 0;
 
   private transformPipeline: TransformPipeline;
-  private copyPipeline: CopyPipeline;
+  private copyPipeline: ExternalCopyPipeline;
   private pingPongView: PingPongTexturePair | null = null;
   private readonly scopeRenderer: ScopeRenderer | null;
   private readonly scopeContexts: ScopeGpuContexts;
@@ -51,7 +51,7 @@ export class VideoFrameRenderer {
       sampler: GPUSampler,
       effects: EffectsPipeline,
       outputPass: OutputPipeline,
-      copyPipeline: CopyPipeline,
+      copyPipeline: ExternalCopyPipeline,
       transformPipeline: TransformPipeline,
       scopeRenderer: ScopeRenderer | null,
       scopeContexts: ScopeGpuContexts,
@@ -85,7 +85,7 @@ export class VideoFrameRenderer {
 
     const effectPipeline = EffectsPipeline.create(device);
     const outputPipeline = OutputPipeline.create(device);
-    const copyPipeline = CopyPipeline.create(device, WORK_FORMAT);
+    const copyPipeline = ExternalCopyPipeline.create(device, WORK_FORMAT);
     const transformPipeline = TransformPipeline.create(device, WORK_FORMAT);
 
     const sampler = device.createSampler({

@@ -13,3 +13,4 @@ export {
   resetOpticalFlowAnalyzer,
   type MotionResult,
 } from './OpticalFlowAnalyzer';
+export { MotionFlowVisualization } from './MotionFlowVisualization';

@@ -6,7 +6,7 @@ import AbstractPipeline from "./AbstractPipeline";
 /**
  * CopyPipeline - GPU pipeline for copying external textures to a GPUTextureView
  */
-export class CopyPipeline extends AbstractPipeline{
+export class ExternalCopyPipeline extends AbstractPipeline{
   readonly builder: RenderPipelineBuilder;
   readonly pipeline: GPURenderPipeline;
 
@@ -19,14 +19,14 @@ export class CopyPipeline extends AbstractPipeline{
     this.pipeline = pipeline;
   }
 
-  static create(device: GPUDevice, colorFormat: GPUTextureFormat = 'rgba8unorm'): CopyPipeline {
+  static create(device: GPUDevice, colorFormat: GPUTextureFormat = 'rgba8unorm'): ExternalCopyPipeline {
     const builder = new RenderPipelineBuilder(copyExternalSource as string, device);
     builder.setBindingGroupDataDescriptor([
       {binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
       {binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {}},
     ]);
     const pipeline = builder.createPipeline('vs_main', 'fs_main', colorFormat);
-    return new CopyPipeline(builder,  pipeline);
+    return new ExternalCopyPipeline(builder,  pipeline);
   }
 
   gpuRender(params: GpuRenderParams): GPUTextureView {

@@ -54,7 +54,7 @@
       }
 
       .page {
-        max-width: 1180px;
+        max-width: 1560px;
         margin: 0 auto;
         padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 3vw, 1.75rem) 3rem;
       }
@@ -141,7 +141,7 @@
 
       @media (min-width: 960px) {
         .main-grid {
-          grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+          grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
         }
       }
 
@@ -386,6 +386,8 @@
       /* —— Scopes —— */
       .scopes-section {
         margin-top: 0;
+        container-type: inline-size;
+        container-name: scopes;
       }
 
       .scopes-section > h2 {
@@ -399,8 +401,20 @@
 
       .scopes {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        grid-template-columns: 1fr;
         gap: 1rem;
+      }
+
+      @container scopes (min-width: 34rem) {
+        .scopes {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @container scopes (min-width: 48rem) {
+        .scopes {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
       }
 
       .scopes figure {
@@ -427,16 +441,148 @@
         border: 1px solid var(--border);
       }
 
-      .motion-readout {
+      .motion-panel {
         margin-top: 1rem;
-        padding: 0.85rem 1rem;
-        font-size: 0.82rem;
+        padding: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      .motion-panel--idle .motion-metrics,
+      .motion-panel--idle .motion-sparkline-wrap,
+      .motion-panel--idle .motion-panel-meta,
+      .motion-panel--idle .motion-scene-cut {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+
+      .motion-panel-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .motion-panel-title {
+        margin: 0;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .motion-panel-meta {
         font-family: var(--font-mono);
-        color: #6ee7b7;
-        background: rgba(16, 185, 129, 0.08);
-        border: 1px solid rgba(16, 185, 129, 0.2);
+        font-size: 0.65rem;
+        color: var(--text-muted);
+      }
+
+      .motion-scene-cut {
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #fbbf24;
+        background: rgba(251, 191, 36, 0.12);
+        border: 1px solid rgba(251, 191, 36, 0.35);
+        padding: 0.2rem 0.45rem;
+        border-radius: 6px;
+      }
+
+      .motion-panel-status {
+        margin: 0;
+        padding: 0.65rem 1rem;
+        font-size: 0.8rem;
+        font-family: var(--font-mono);
+        color: var(--accent-text);
+        background: rgba(34, 211, 238, 0.06);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .motion-panel-status[hidden] {
+        display: none;
+      }
+
+      .motion-metrics {
+        padding: 0.85rem 1rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+      }
+
+      .motion-metric-label {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.5rem;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        margin-bottom: 0.3rem;
+      }
+
+      .motion-metric-val {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: var(--text);
+        min-width: 2.5rem;
+        text-align: right;
+      }
+
+      .motion-track {
+        height: 8px;
+        border-radius: 999px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        overflow: hidden;
+      }
+
+      .motion-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        transition: width 140ms ease-out;
+      }
+
+      .motion-fill-total {
+        background: linear-gradient(90deg, #06b6d4, #22d3ee);
+      }
+
+      .motion-fill-global {
+        background: linear-gradient(90deg, #6366f1, #818cf8);
+      }
+
+      .motion-fill-local {
+        background: linear-gradient(90deg, #d97706, #fbbf24);
+      }
+
+      .motion-sparkline-wrap {
+        padding: 0 1rem 0.85rem;
+      }
+
+      .motion-sparkline-label {
+        display: block;
+        font-size: 0.65rem;
+        font-weight: 500;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 0.35rem;
+      }
+
+      #motionSparkline {
+        display: block;
+        width: 100%;
+        height: 56px;
         border-radius: var(--radius-sm);
-        white-space: pre-wrap;
+        border: 1px solid var(--border);
       }
 
       video {
@@ -454,7 +600,7 @@
             <p class="hero-lead">
               Load a local file and run it through a small render graph:
               <code>VideoFrame</code> → copy → 3D transform (straight alpha) → optional WGSL effects → compositing.
-              Live histogram, waveform, and vectorscope read the same post-effect image; optical flow adds a motion readout.
+              Live histogram, waveform, and vectorscope read the same post-effect image; optical flow adds a motion panel with smoothed meters and history.
             </p>
           </div>
           <div class="tech-badges" aria-hidden="true">
@@ -493,7 +639,47 @@
                 <canvas id="scopeVectorscope" width="320" height="180"></canvas>
               </figure>
             </div>
-            <p id="motion" class="motion-readout" aria-live="polite">Optical flow: waiting for frames…</p>
+            <section class="motion-panel motion-panel--idle" id="motionPanel" aria-label="Optical flow" role="region">
+              <div class="motion-panel-header">
+                <h3 class="motion-panel-title">Optical flow</h3>
+                <span class="motion-panel-meta">GPU · Lucas–Kanade · 160×90 · smoothed</span>
+                <span class="motion-scene-cut" id="motionSceneCut" hidden>Scene cut</span>
+              </div>
+              <p class="motion-panel-status" id="motionStatus" aria-live="polite">Waiting for video frames…</p>
+              <div class="motion-metrics">
+                <div class="motion-metric" role="group" aria-label="Total motion in frame">
+                  <div class="motion-metric-label">
+                    <span>Total motion</span>
+                    <span class="motion-metric-val" data-flow-val="total">0%</span>
+                  </div>
+                  <div class="motion-track">
+                    <div class="motion-fill motion-fill-total" data-flow-fill="total"></div>
+                  </div>
+                </div>
+                <div class="motion-metric" role="group" aria-label="Global camera-like motion">
+                  <div class="motion-metric-label">
+                    <span>Global</span>
+                    <span class="motion-metric-val" data-flow-val="global">0%</span>
+                  </div>
+                  <div class="motion-track">
+                    <div class="motion-fill motion-fill-global" data-flow-fill="global"></div>
+                  </div>
+                </div>
+                <div class="motion-metric" role="group" aria-label="Local object motion">
+                  <div class="motion-metric-label">
+                    <span>Local</span>
+                    <span class="motion-metric-val" data-flow-val="local">0%</span>
+                  </div>
+                  <div class="motion-track">
+                    <div class="motion-fill motion-fill-local" data-flow-fill="local"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="motion-sparkline-wrap">
+                <span class="motion-sparkline-label">Total motion over time</span>
+                <canvas id="motionSparkline" width="320" height="56" aria-hidden="true"></canvas>
+              </div>
+            </section>
             <video id="video" playsinline muted loop></video>
           </section>
         </div>
