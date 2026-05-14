@@ -1,5 +1,3 @@
-// Transform UV math synced from ../src/shaders/composite.wgsl (fragmentMain, ~429–502).
-// Outputs straight alpha so ../../src/shaders/output.wgsl can draw transparency grid (parity with main app).
 
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -125,6 +123,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   let outOfBounds = uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0;
   let maskAlpha = select(layerColor.a, 0.0, outOfBounds);
   let alpha = maskAlpha * layer.opacity;
+  let rgb = select(vec3f(0.0), layerColor.rgb, !outOfBounds);
 
-  return vec4f(layerColor.rgb, alpha);
+  return vec4f(rgb, alpha);
 }

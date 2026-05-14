@@ -1,4 +1,3 @@
-// Output shader — copied from ../../src/shaders/output.wgsl (preview / transparency grid / stacked alpha).
 
 struct OutputUniforms {
   showTransparencyGrid: u32,
@@ -72,5 +71,8 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     return vec4f(result, 1.0);
   }
 
-  return vec4f(color.rgb, 1.0);
+  // Default preview: straight-alpha input → premultiplied RGBA for the swap chain
+  // (VideoFrameRenderer uses canvas alphaMode "premultiplied"). Preserves empty
+  // margin around scaled / moved layers instead of smearing edge-clamped RGB.
+  return vec4f(color.rgb * color.a, color.a);
 }

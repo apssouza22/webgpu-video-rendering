@@ -202,6 +202,7 @@ export class EffectsPipeline extends AbstractPipeline{
       colorAttachments: [
         {
           view: effectOutput,
+          clearValue: {r: 0, g: 0, b: 0, a: 0},
           loadOp: 'clear',
           storeOp: 'store',
         },
