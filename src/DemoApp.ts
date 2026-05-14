@@ -1,8 +1,9 @@
+import type {MotionFlowVisualization, MotionResult, OpticalFlowAnalyzer} from './analysis';
+import type {PerformanceHud} from './PerformanceHud';
 import type {
   FrameRenderOptions,
   VideoFrameRenderer,
 } from './VideoFrameRenderer';
-import type {MotionFlowVisualization, MotionResult, OpticalFlowAnalyzer} from './analysis';
 import {DemoEffectParams, DemoEffectType} from "./types";
 import {VideoTransformLayerParams} from "./TransformPipeline";
 
@@ -46,6 +47,8 @@ export interface TransformDemoDom {
   paramCVal: HTMLSpanElement;
   /** Optical flow UI (optional) */
   motionViz?: MotionFlowVisualization;
+  /** WebGPU timing readout */
+  perfHud?: PerformanceHud;
 }
 
 function degToRad(d: number): number {
@@ -351,6 +354,7 @@ export class DemoApp {
     this.renderer.releaseWorkTextures();
     this.opticalFlow?.reset();
     this.dom.motionViz?.reset();
+    this.dom.perfHud?.reset();
     this.currentObjectUrl = URL.createObjectURL(file);
     this.dom.video.src = this.currentObjectUrl;
   }
@@ -392,20 +396,33 @@ export class DemoApp {
     this.syncNumbersFromDom();
 
     let flowBitmap: ImageBitmap | null = null;
+    let prepMs: number | undefined;
     if (this.opticalFlow != null) {
+      const prepStart = performance.now();
       try {
         flowBitmap = await createImageBitmap(frame);
+        prepMs = performance.now() - prepStart;
       } catch (e) {
         this.dom.motionViz?.setError(`createImageBitmap failed: ${e}`);
       }
     }
 
+    const gpuStart = performance.now();
     this.renderer.renderVideoFrame(
       this.dom.canvas,
       frame,
       this.frameOptions(),
       () => {
         this.gpuFrameBusy = false;
+        this.dom.perfHud?.recordFrame(
+            gpuStart,
+            performance.now(),
+            video.videoWidth,
+            video.videoHeight,
+            this.dom.canvas.width,
+            this.dom.canvas.height,
+            prepMs,
+        );
         if (this.opticalFlow && flowBitmap) {
           const bmp = flowBitmap;
           void this.opticalFlow

@@ -199,6 +199,54 @@
         min-height: 2.75rem;
       }
 
+      .perf-hud {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+        gap: 0.45rem 1rem;
+        padding: 0.65rem 1rem 0.75rem;
+        border-top: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.28);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        color: var(--text-muted);
+      }
+
+      .perf-item {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 0.25rem 0.4rem;
+        min-width: 0;
+      }
+
+      .perf-item abbr {
+        cursor: help;
+        text-decoration: underline dotted;
+        text-underline-offset: 2px;
+        font-weight: 500;
+        color: var(--text-muted);
+      }
+
+      .perf-item strong {
+        font-weight: 600;
+        color: var(--accent-text);
+      }
+
+      .perf-unit {
+        font-size: 0.68rem;
+        opacity: 0.85;
+      }
+
+      .perf-res {
+        grid-column: 1 / -1;
+      }
+
+      @media (min-width: 640px) {
+        .perf-res {
+          grid-column: auto;
+        }
+      }
+
       aside.panel {
         position: relative;
       }
@@ -520,11 +568,30 @@
       .motion-metric-label {
         display: flex;
         justify-content: space-between;
-        align-items: baseline;
-        gap: 0.5rem;
+        align-items: flex-start;
+        gap: 0.65rem;
         font-size: 0.78rem;
         color: var(--text-muted);
-        margin-bottom: 0.3rem;
+        margin-bottom: 0.35rem;
+      }
+
+      .motion-metric-title-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        min-width: 0;
+      }
+
+      .motion-metric-name {
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .motion-metric-desc {
+        font-size: 0.68rem;
+        line-height: 1.4;
+        color: var(--text-muted);
+        font-weight: 400;
       }
 
       .motion-metric-val {
@@ -621,6 +688,26 @@
               <canvas id="canvas" width="960" height="540"></canvas>
             </div>
             <p id="status" class="status-bar" role="status">Initializing…</p>
+            <div class="perf-hud" id="perfHud" aria-label="WebGPU video processing performance">
+              <div class="perf-item">
+                <abbr title="Frames per second, from elapsed time between GPU queue-idle points (preview + scopes)">FPS</abbr>
+                <strong id="perfFps">—</strong>
+              </div>
+              <div class="perf-item">
+                <abbr title="Wall time until the GPU finishes submitted work: main preview pipeline plus histogram, waveform, and vectorscope passes">GPU</abbr>
+                <strong id="perfGpuMs">—</strong>
+                <span class="perf-unit">ms</span>
+              </div>
+              <div class="perf-item">
+                <abbr title="CPU time to create an ImageBitmap for optical flow (shown only when optical flow is enabled)">Prep</abbr>
+                <strong id="perfPrepMs">—</strong>
+                <span class="perf-unit">ms</span>
+              </div>
+              <div class="perf-item perf-res">
+                <abbr title="Preview canvas resolution, then source video frame size (decoded pixels)">Size</abbr>
+                <strong id="perfRes">—</strong>
+              </div>
+            </div>
           </section>
 
           <section class="scopes-section">
@@ -647,27 +734,51 @@
               </div>
               <p class="motion-panel-status" id="motionStatus" aria-live="polite">Waiting for video frames…</p>
               <div class="motion-metrics">
-                <div class="motion-metric" role="group" aria-label="Total motion in frame">
+                <div
+                  class="motion-metric"
+                  role="group"
+                  aria-label="Total motion"
+                  aria-describedby="motion-desc-total"
+                >
                   <div class="motion-metric-label">
-                    <span>Total motion</span>
+                    <span class="motion-metric-title-block">
+                      <span class="motion-metric-name">Total</span>
+                      <span id="motion-desc-total" class="motion-metric-desc">Average movement between frames across the whole picture (flow strength).</span>
+                    </span>
                     <span class="motion-metric-val" data-flow-val="total">0%</span>
                   </div>
                   <div class="motion-track">
                     <div class="motion-fill motion-fill-total" data-flow-fill="total"></div>
                   </div>
                 </div>
-                <div class="motion-metric" role="group" aria-label="Global camera-like motion">
+                <div
+                  class="motion-metric"
+                  role="group"
+                  aria-label="Global motion"
+                  aria-describedby="motion-desc-global"
+                >
                   <div class="motion-metric-label">
-                    <span>Global</span>
+                    <span class="motion-metric-title-block">
+                      <span class="motion-metric-name">Global</span>
+                      <span id="motion-desc-global" class="motion-metric-desc">Camera-like motion: most flow vectors point the same way (pans, tilts, zooms).</span>
+                    </span>
                     <span class="motion-metric-val" data-flow-val="global">0%</span>
                   </div>
                   <div class="motion-track">
                     <div class="motion-fill motion-fill-global" data-flow-fill="global"></div>
                   </div>
                 </div>
-                <div class="motion-metric" role="group" aria-label="Local object motion">
+                <div
+                  class="motion-metric"
+                  role="group"
+                  aria-label="Local motion"
+                  aria-describedby="motion-desc-local"
+                >
                   <div class="motion-metric-label">
-                    <span>Local</span>
+                    <span class="motion-metric-title-block">
+                      <span class="motion-metric-name">Local</span>
+                      <span id="motion-desc-local" class="motion-metric-desc">Object motion: vectors point in different directions from the overall shift (moving subjects).</span>
+                    </span>
                     <span class="motion-metric-val" data-flow-val="local">0%</span>
                   </div>
                   <div class="motion-track">

@@ -1,6 +1,7 @@
 import { DemoApp } from './DemoApp';
 import { MotionFlowVisualization } from './analysis/MotionFlowVisualization';
 import { OpticalFlowAnalyzer } from './analysis/OpticalFlowAnalyzer';
+import { PerformanceHud } from './PerformanceHud';
 import { VideoFrameRenderer } from './VideoFrameRenderer';
 
 const statusEl = document.querySelector<HTMLParagraphElement>('#status')!;
@@ -53,6 +54,15 @@ const perspectiveInput = document.querySelector<HTMLInputElement>('#perspective'
 const perspectiveVal = document.querySelector<HTMLSpanElement>('#perspectiveVal')!;
 const motionPanel = document.querySelector<HTMLElement>('#motionPanel');
 const motionViz = motionPanel ? new MotionFlowVisualization(motionPanel) : undefined;
+
+const perfFps = document.querySelector<HTMLElement>('#perfFps');
+const perfGpuMs = document.querySelector<HTMLElement>('#perfGpuMs');
+const perfPrepMs = document.querySelector<HTMLElement>('#perfPrepMs');
+const perfRes = document.querySelector<HTMLElement>('#perfRes');
+const perfHud =
+    perfFps && perfGpuMs && perfPrepMs && perfRes
+        ? new PerformanceHud({fps: perfFps, gpuMs: perfGpuMs, prepMs: perfPrepMs, resolution: perfRes})
+        : undefined;
 
 if (!navigator.gpu) {
   statusEl.textContent =
@@ -111,5 +121,6 @@ const app = new DemoApp(renderer, {
   paramCInput,
   paramCVal,
   motionViz,
+  perfHud,
 }, flowReady ? opticalFlow : null);
 app.start();
