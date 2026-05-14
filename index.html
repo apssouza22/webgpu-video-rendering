@@ -3,189 +3,584 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Simplified GPU video transform + effects + output</title>
+    <meta
+      name="description"
+      content="Local video in the browser through a WebGPU pipeline: WebCodecs frames, 3D transform, WGSL effects, compositing, and GPU scopes."
+    />
+    <title>WebGPU video lab · transform, effects &amp; scopes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
       :root {
-        font-family: system-ui, sans-serif;
-        color: #e8e8e8;
-        background: #1a1a1a;
+        --bg: #0c0e12;
+        --bg-elevated: #12151c;
+        --surface: #161b24;
+        --surface-hover: #1c2330;
+        --border: rgba(148, 163, 184, 0.12);
+        --border-strong: rgba(148, 163, 184, 0.22);
+        --text: #eceff4;
+        --text-muted: #94a3b8;
+        --accent: #22d3ee;
+        --accent-soft: rgba(34, 211, 238, 0.14);
+        --accent-text: #a5f3fc;
+        --radius: 14px;
+        --radius-sm: 10px;
+        --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+        color-scheme: dark;
       }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
       body {
-        max-width: 980px;
-        margin: 1rem auto;
-        padding: 0 1rem;
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-sans);
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--text);
+        background: var(--bg);
+        background-image:
+          radial-gradient(ellipse 120% 80% at 50% -30%, rgba(34, 211, 238, 0.08), transparent 55%),
+          radial-gradient(ellipse 60% 40% at 100% 50%, rgba(99, 102, 241, 0.06), transparent 50%);
       }
-      canvas {
+
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 3vw, 1.75rem) 3rem;
+      }
+
+      /* —— Header —— */
+      .hero {
+        margin-bottom: 1.75rem;
+      }
+
+      .hero-top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent-text);
+        background: var(--accent-soft);
+        border: 1px solid rgba(34, 211, 238, 0.25);
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        margin-bottom: 0.65rem;
+      }
+
+      .hero h1 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.55rem, 4vw, 2rem);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        max-width: 20ch;
+      }
+
+      .hero-lead {
+        margin: 0;
+        max-width: 52ch;
+        color: var(--text-muted);
+        font-size: 0.97rem;
+      }
+
+      .hero-lead code {
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        color: var(--accent-text);
+        background: var(--surface);
+        padding: 0.12em 0.4em;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+      }
+
+      .tech-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        justify-content: flex-end;
+        align-self: center;
+      }
+
+      .tech-badges span {
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+        padding: 0.35rem 0.55rem;
+        border-radius: 8px;
+      }
+
+      /* —— Layout —— */
+      .main-grid {
+        display: grid;
+        gap: 1.25rem;
+        align-items: start;
+      }
+
+      @media (min-width: 960px) {
+        .main-grid {
+          grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+        }
+      }
+
+      .preview-column {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        min-width: 0;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .card-header h2 {
+        margin: 0;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .preview-body {
+        padding: 0;
+        background: #000;
+      }
+
+      #canvas {
         display: block;
         width: 100%;
         height: auto;
+        vertical-align: middle;
         background: #000;
-        border: 1px solid #333;
       }
-      .controls {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 0.6rem 1rem;
-        margin: 0.75rem 0;
-        align-items: center;
-      }
-      label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        font-size: 0.88rem;
-      }
-      label input[type='range'] {
-        flex: 1;
-        min-width: 80px;
-      }
-      #status {
-        font-size: 0.9rem;
-        color: #9cf;
+
+      .status-bar {
+        margin: 0;
+        padding: 0.75rem 1rem;
+        font-size: 0.82rem;
+        color: var(--accent-text);
+        background: linear-gradient(90deg, rgba(34, 211, 238, 0.12), transparent);
+        border-top: 1px solid var(--border);
+        font-family: var(--font-mono);
         white-space: pre-wrap;
+        min-height: 2.75rem;
       }
-      video {
-        display: none;
+
+      aside.panel {
+        position: relative;
       }
+
+      @media (min-width: 960px) {
+        aside.panel {
+          position: sticky;
+          top: 1rem;
+          max-height: calc(100vh - 2rem);
+          overflow-y: auto;
+        }
+      }
+
+      .panel-inner {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.15rem;
+      }
+
+      .control-block {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+      }
+
+      .control-block > h3 {
+        margin: 0;
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--text-muted);
+      }
+
       .file-row {
         display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
-        align-items: center;
-        margin: 0.75rem 0;
+        flex-direction: column;
+        gap: 0.65rem;
       }
+
+      @media (min-width: 520px) {
+        .file-row {
+          flex-direction: row;
+          flex-wrap: wrap;
+          align-items: flex-end;
+        }
+      }
+
+      input[type='file'] {
+        width: 100%;
+        max-width: 100%;
+        font-family: var(--font-sans);
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      input[type='file']::file-selector-button {
+        margin-right: 0.75rem;
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 0.82rem;
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-strong);
+        background: var(--bg-elevated);
+        color: var(--text);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+      }
+
+      input[type='file']::file-selector-button:hover {
+        background: var(--surface-hover);
+        border-color: rgba(34, 211, 238, 0.35);
+      }
+
+      .field-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        min-width: 0;
+      }
+
+      .field-row label {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--text-muted);
+      }
+
+      select {
+        width: 100%;
+        font-family: var(--font-sans);
+        font-size: 0.88rem;
+        padding: 0.5rem 0.65rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-strong);
+        background: var(--bg-elevated);
+        color: var(--text);
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.65rem center;
+        padding-right: 2rem;
+      }
+
+      select:focus {
+        outline: 2px solid rgba(34, 211, 238, 0.45);
+        outline-offset: 1px;
+      }
+
+      .select-grid {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      @media (min-width: 400px) {
+        .select-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
       .mirror-row {
         display: none;
-        gap: 1rem;
-        margin: 0.25rem 0 0.5rem;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.25rem;
+        padding: 0.5rem 0.65rem;
+        background: var(--bg-elevated);
+        border-radius: var(--radius-sm);
+        border: 1px dashed var(--border-strong);
       }
-      select {
-        background: #2a2a2a;
-        color: #eee;
-        border: 1px solid #444;
-        padding: 0.25rem 0.5rem;
+
+      .mirror-row label {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        font-size: 0.84rem;
+        color: var(--text);
+        cursor: pointer;
       }
+
+      .controls {
+        display: grid;
+        gap: 0.55rem 0.75rem;
+        margin: 0;
+      }
+
+      .controls label {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        gap: 0.3rem 0.65rem;
+        align-items: center;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .controls label > span:first-of-type {
+        font-weight: 500;
+      }
+
+      .controls label input[type='range'] {
+        grid-column: 1 / -1;
+        width: 100%;
+        height: 6px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .controls label > span:last-of-type {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--accent-text);
+        text-align: right;
+        min-width: 2.75rem;
+      }
+
+      input[type='checkbox'] {
+        width: 1rem;
+        height: 1rem;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      /* —— Scopes —— */
+      .scopes-section {
+        margin-top: 0;
+      }
+
+      .scopes-section > h2 {
+        margin: 0 0 0.75rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
       .scopes {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: 1rem;
-        margin: 1rem 0;
       }
+
       .scopes figure {
         margin: 0;
+        padding: 0.75rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
       }
+
       .scopes figcaption {
-        font-size: 0.8rem;
-        color: #aaa;
-        margin-bottom: 0.35rem;
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
       }
+
       .scopes canvas {
         display: block;
         width: 100%;
         height: auto;
-        background: #0a0a0a;
-        border: 1px solid #333;
+        border-radius: var(--radius-sm);
+        background: #050608;
+        border: 1px solid var(--border);
       }
+
       .motion-readout {
-        font-size: 0.88rem;
-        color: #9c9;
-        margin: 0.5rem 0 0.75rem;
+        margin-top: 1rem;
+        padding: 0.85rem 1rem;
+        font-size: 0.82rem;
+        font-family: var(--font-mono);
+        color: #6ee7b7;
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        border-radius: var(--radius-sm);
         white-space: pre-wrap;
+      }
+
+      video {
+        display: none;
       }
     </style>
   </head>
   <body>
-    <h1>Simplified GPU pipeline (parity)</h1>
-    <p>
-      Same shader sources as the main app: <code>copy-external</code> → <code>video-transform</code> (straight alpha) → optional
-      modular GPU effects (<code>src/effects/</code> per-effect WGSL + <code>common.wgsl</code>, see <code>EffectsPipeline</code>) → <code>output.wgsl</code> (<code>OutputPipeline</code>). Fixed canvas 960×540.
-    </p>
-    <div class="file-row">
-      <input type="file" id="file" accept="video/*" />
-      <label>
-        Output
-        <select id="outputMode">
-          <option value="normal" selected>Normal (over black)</option>
-          <option value="grid">Transparency grid</option>
-          <option value="stackedAlpha">Stacked alpha preview</option>
-        </select>
-      </label>
-      <label>
-        Effect
-        <select id="effectType">
-          <option value="none" selected>None</option>
-          <option value="hue-shift">Hue shift</option>
-          <option value="brightness">Brightness</option>
-          <option value="contrast">Contrast</option>
-          <option value="saturation">Saturation</option>
-          <option value="pixelate">Pixelate</option>
-          <option value="kaleidoscope">Kaleidoscope</option>
-          <option value="mirror">Mirror</option>
-          <option value="rgb-split">RGB split</option>
-          <option value="invert">Invert</option>
-          <option value="levels">Levels</option>
-          <option value="box-blur">Box blur</option>
-        </select>
-      </label>
+    <div class="page">
+      <header class="hero">
+        <div class="hero-top">
+          <div>
+            <span class="eyebrow">Browser · WebGPU + WebCodecs</span>
+            <h1>Real-time video on the GPU</h1>
+            <p class="hero-lead">
+              Load a local file and run it through a small render graph:
+              <code>VideoFrame</code> → copy → 3D transform (straight alpha) → optional WGSL effects → compositing.
+              Live histogram, waveform, and vectorscope read the same post-effect image; optical flow adds a motion readout.
+            </p>
+          </div>
+          <div class="tech-badges" aria-hidden="true">
+            <span>WGSL</span>
+            <span>960×540</span>
+            <span>importExternalTexture</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="main-grid">
+        <div class="preview-column">
+          <section class="card preview-card" aria-label="Preview">
+            <div class="card-header">
+              <h2>Preview</h2>
+            </div>
+            <div class="preview-body">
+              <canvas id="canvas" width="960" height="540"></canvas>
+            </div>
+            <p id="status" class="status-bar" role="status">Initializing…</p>
+          </section>
+
+          <section class="scopes-section">
+            <h2>Scopes · post-effects image</h2>
+            <div class="scopes" aria-label="Video scopes">
+              <figure>
+                <figcaption>Histogram — GPU, BT.709 luma + RGB</figcaption>
+                <canvas id="scopeHistogram" width="320" height="180"></canvas>
+              </figure>
+              <figure>
+                <figcaption>Waveform — GPU, RGB parade</figcaption>
+                <canvas id="scopeWaveform" width="320" height="180"></canvas>
+              </figure>
+              <figure>
+                <figcaption>Vectorscope — GPU, BT.709 Cb/Cr</figcaption>
+                <canvas id="scopeVectorscope" width="320" height="180"></canvas>
+              </figure>
+            </div>
+            <p id="motion" class="motion-readout" aria-live="polite">Optical flow: waiting for frames…</p>
+            <video id="video" playsinline muted loop></video>
+          </section>
+        </div>
+
+        <aside class="card panel" aria-label="Controls">
+          <div class="card-header">
+            <h2>Controls</h2>
+          </div>
+          <div class="panel-inner">
+            <div class="control-block">
+              <h3>Source &amp; look</h3>
+              <div class="file-row">
+                <input type="file" id="file" accept="video/*" />
+              </div>
+              <div class="select-grid">
+                <div class="field-row">
+                  <label for="outputMode">Output compositing</label>
+                  <select id="outputMode">
+                    <option value="normal" selected>Normal (over black)</option>
+                    <option value="grid">Transparency grid</option>
+                    <option value="stackedAlpha">Stacked alpha preview</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <label for="effectType">Effect</label>
+                  <select id="effectType">
+                    <option value="none" selected>None</option>
+                    <option value="hue-shift">Hue shift</option>
+                    <option value="brightness">Brightness</option>
+                    <option value="contrast">Contrast</option>
+                    <option value="saturation">Saturation</option>
+                    <option value="pixelate">Pixelate</option>
+                    <option value="kaleidoscope">Kaleidoscope</option>
+                    <option value="mirror">Mirror</option>
+                    <option value="rgb-split">RGB split</option>
+                    <option value="invert">Invert</option>
+                    <option value="levels">Levels</option>
+                    <option value="box-blur">Box blur</option>
+                  </select>
+                </div>
+              </div>
+              <div class="mirror-row">
+                <label><input type="checkbox" id="mirrorH" /> Mirror horizontal</label>
+                <label><input type="checkbox" id="mirrorV" /> Mirror vertical</label>
+              </div>
+            </div>
+
+            <div class="control-block">
+              <h3>Effect parameters</h3>
+              <div class="controls effect-params">
+                <label>
+                  <span id="paramALabel">Param A</span>
+                  <input type="range" id="paramA" min="0" max="1" step="0.01" value="0.15" />
+                  <span id="paramAVal">0</span>
+                </label>
+                <label>
+                  <span id="paramBLabel">Param B</span>
+                  <input type="range" id="paramB" min="0" max="1" step="0.01" value="0" />
+                  <span id="paramBVal">0</span>
+                </label>
+                <label>
+                  <span id="paramCLabel">Param C</span>
+                  <input type="range" id="paramC" min="0.3" max="3" step="0.05" value="1" />
+                  <span id="paramCVal">1</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="control-block">
+              <h3>Transform layer</h3>
+              <div class="controls">
+                <label><span>Opacity</span><input type="range" id="opacity" min="0" max="1" step="0.01" value="1" /><span id="opacityVal">1</span></label>
+                <label><span>Pos X</span><input type="range" id="posX" min="-1" max="1" step="0.005" value="0" /><span id="posXVal">0</span></label>
+                <label><span>Pos Y</span><input type="range" id="posY" min="-1" max="1" step="0.005" value="0" /><span id="posYVal">0</span></label>
+                <label><span>Pos Z</span><input type="range" id="posZ" min="-2" max="2" step="0.01" value="0" /><span id="posZVal">0</span></label>
+                <label><span>Scale X</span><input type="range" id="scaleX" min="0.25" max="3" step="0.01" value="1" /><span id="scaleXVal">1</span></label>
+                <label><span>Scale Y</span><input type="range" id="scaleY" min="0.25" max="3" step="0.01" value="1" /><span id="scaleYVal">1</span></label>
+                <label><span>Rot X°</span><input type="range" id="rotX" min="-90" max="90" step="1" value="0" /><span id="rotXVal">0</span></label>
+                <label><span>Rot Y°</span><input type="range" id="rotY" min="-90" max="90" step="1" value="0" /><span id="rotYVal">0</span></label>
+                <label><span>Rot Z°</span><input type="range" id="rotZ" min="-180" max="180" step="1" value="0" /><span id="rotZVal">0</span></label>
+                <label><span>Perspective</span><input type="range" id="perspective" min="0.5" max="10" step="0.05" value="2" /><span id="perspectiveVal">2</span></label>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
-    <div class="mirror-row">
-      <label><input type="checkbox" id="mirrorH" /> Mirror horizontal</label>
-      <label><input type="checkbox" id="mirrorV" /> Mirror vertical</label>
-    </div>
-    <div class="controls effect-params">
-      <label>
-        <span id="paramALabel">Param A</span>
-        <input type="range" id="paramA" min="0" max="1" step="0.01" value="0.15" />
-        <span id="paramAVal">0</span>
-      </label>
-      <label>
-        <span id="paramBLabel">Param B</span>
-        <input type="range" id="paramB" min="0" max="1" step="0.01" value="0" />
-        <span id="paramBVal">0</span>
-      </label>
-      <label>
-        <span id="paramCLabel">Param C</span>
-        <input type="range" id="paramC" min="0.3" max="3" step="0.05" value="1" />
-        <span id="paramCVal">1</span>
-      </label>
-    </div>
-    <div class="controls">
-      <label>Opacity <input type="range" id="opacity" min="0" max="1" step="0.01" value="1" /> <span id="opacityVal">1</span></label>
-      <label>Pos X <input type="range" id="posX" min="-1" max="1" step="0.005" value="0" /> <span id="posXVal">0</span></label>
-      <label>Pos Y <input type="range" id="posY" min="-1" max="1" step="0.005" value="0" /> <span id="posYVal">0</span></label>
-      <label>Pos Z <input type="range" id="posZ" min="-2" max="2" step="0.01" value="0" /> <span id="posZVal">0</span></label>
-      <label>Scale X <input type="range" id="scaleX" min="0.25" max="3" step="0.01" value="1" /> <span id="scaleXVal">1</span></label>
-      <label>Scale Y <input type="range" id="scaleY" min="0.25" max="3" step="0.01" value="1" /> <span id="scaleYVal">1</span></label>
-      <label>Rot X° <input type="range" id="rotX" min="-90" max="90" step="1" value="0" /> <span id="rotXVal">0</span></label>
-      <label>Rot Y° <input type="range" id="rotY" min="-90" max="90" step="1" value="0" /> <span id="rotYVal">0</span></label>
-      <label>Rot Z° <input type="range" id="rotZ" min="-180" max="180" step="1" value="0" /> <span id="rotZVal">0</span></label>
-      <label>Perspective <input type="range" id="perspective" min="0.5" max="10" step="0.05" value="2" /> <span id="perspectiveVal">2</span></label>
-    </div>
-    <canvas id="canvas" width="960" height="540"></canvas>
-    <section class="scopes" aria-label="Video scopes">
-      <figure>
-        <figcaption>Histogram (GPU, BT.709 luma + RGB)</figcaption>
-        <canvas id="scopeHistogram" width="320" height="180"></canvas>
-      </figure>
-      <figure>
-        <figcaption>Waveform (GPU, RGB parade)</figcaption>
-        <canvas id="scopeWaveform" width="320" height="180"></canvas>
-      </figure>
-      <figure>
-        <figcaption>Vectorscope (GPU, BT.709 Cb/Cr)</figcaption>
-        <canvas id="scopeVectorscope" width="320" height="180"></canvas>
-      </figure>
-    </section>
-    <p id="motion" class="motion-readout" aria-live="polite">
-      Optical flow: waiting for frames…
-    </p>
-    <video id="video" playsinline muted></video>
-    <p id="status">Initializing…</p>
-    <p style="font-size: 0.85rem; color: #888">
-      Scopes read the post-effects, post-transform texture (see <code>simplified/src/analysis/</code>). Optical flow uses the same <code>opticalflow.wgsl</code> as the main app, downsampled to 160×90 for speed.
-      Stacked alpha matches <code>output.wgsl</code> mode 2 (vertically stacked RGB/α; single-layer demos may look split).
-    </p>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

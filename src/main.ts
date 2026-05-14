@@ -53,7 +53,8 @@ const perspectiveVal = document.querySelector<HTMLSpanElement>('#perspectiveVal'
 const motionEl = document.querySelector<HTMLParagraphElement>('#motion')!;
 
 if (!navigator.gpu) {
-  statusEl.textContent = 'WebGPU not available in this browser.';
+  statusEl.textContent =
+      'WebGPU is not available here. Try a recent Chromium-based browser with GPU acceleration enabled.';
   throw new Error('no webgpu');
 }
 

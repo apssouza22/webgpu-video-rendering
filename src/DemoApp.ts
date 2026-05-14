@@ -304,6 +304,8 @@ export class DemoApp {
   }
 
   start(): void {
+    this.dom.video.loop = true;
+
     const bindRange = (el: HTMLInputElement) => {
       el.addEventListener('input', () => {
         this.syncNumbersFromDom();
@@ -330,7 +332,7 @@ export class DemoApp {
     this.dom.mirrorVInput.addEventListener('change', () => {});
 
     this.dom.video.addEventListener('loadeddata', () => {
-      this.setStatus('Video ready — transform → modular effects (src/effects WGSL) → output.wgsl.');
+      this.setStatus('Playing — GPU transform, effects, and output pass are live.');
       void this.dom.video.play().catch((e) => this.setStatus(`play() failed: ${e}`));
     });
 
@@ -338,7 +340,9 @@ export class DemoApp {
 
     this.refreshSpanLabels();
     this.renderer.configureSurface();
-    this.setStatus('Pick a video. Transparency grid needs alpha outside the layer (scale down / rotate).');
+    this.setStatus(
+        'Choose a video file to start. Tip: checkerboard preview needs visible alpha — shrink or rotate the layer if the frame is opaque.',
+    );
     requestAnimationFrame(() => this.loop());
   }
 
@@ -381,11 +385,15 @@ export class DemoApp {
       const ts = Math.floor(video.currentTime * 1_000_000);
       frame = new VideoFrame(video, { timestamp: ts });
     } catch (e) {
-      this.setStatus(
-        `new VideoFrame(video) failed (${e}). Try Chrome; some browsers need WebCodecs + compatible sources.`
-      );
+      console.log(`new VideoFrame(video) failed (${e}). Try Chrome; some browsers need WebCodecs + compatible sources.`)
+
       return;
     }
+
+    // One in-flight capture at a time: `await` below would otherwise let the next
+    // rAF start another `new VideoFrame(video)` while this frame is still open,
+    // which throws InvalidStateError on many browsers.
+    this.gpuFrameBusy = true;
 
     this.syncNumbersFromDom();
 
@@ -401,7 +409,6 @@ export class DemoApp {
       }
     }
 
-    this.gpuFrameBusy = true;
     this.renderer.renderVideoFrame(
       this.dom.canvas,
       frame,
