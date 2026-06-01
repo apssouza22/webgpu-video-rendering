@@ -1,11 +1,9 @@
 import videoTransformSource from './shaders/video-transform.wgsl?raw';
-import {RenderPipelineBuilder} from './RenderPipelineBuilder';
 import {GpuRenderParams} from "./types";
 import AbstractPipeline from "./AbstractPipeline";
 import {FrameRenderOptions} from "./VideoFrameRenderer";
 
 export const LAYER_UNIFORM_BYTES = 96; // LayerUniforms from video-transform.wgsl
-export const TRANSFORM_LAYER_UNIFORM_NAME = 'layerUniforms';
 
 /** Values packed into the transform shader's layer uniform buffer. */
 export interface VideoTransformLayerParams {
@@ -25,7 +23,8 @@ export interface VideoTransformLayerParams {
  * GPU pipeline for transforming a video frame (position/scale/rotation) to a fixed-size canvas.
  */
 export class TransformPipeline extends AbstractPipeline {
-  readonly builder: RenderPipelineBuilder;
+  private readonly device: GPUDevice;
+  private readonly bindGroupLayout: GPUBindGroupLayout;
   private readonly pipeline: GPURenderPipeline;
   private readonly uniformBuffer: GPUBuffer;
   private readonly uniformBufferData = new ArrayBuffer(LAYER_UNIFORM_BYTES);
@@ -33,12 +32,14 @@ export class TransformPipeline extends AbstractPipeline {
   private readonly uniformU32 = new Uint32Array(this.uniformBufferData);
 
   private constructor(
-      builder: RenderPipelineBuilder,
+      device: GPUDevice,
+      bindGroupLayout: GPUBindGroupLayout,
       pipeline: GPURenderPipeline,
-      uniformBuffer: GPUBuffer
+      uniformBuffer: GPUBuffer,
   ) {
-    super()
-    this.builder = builder;
+    super();
+    this.device = device;
+    this.bindGroupLayout = bindGroupLayout;
     this.pipeline = pipeline;
     this.uniformBuffer = uniformBuffer;
   }
@@ -51,7 +52,7 @@ export class TransformPipeline extends AbstractPipeline {
   ): void {
     const f = this.uniformF32;
     const u = this.uniformU32;
-    const transformParams = renderOptions.transformParams
+    const transformParams = renderOptions.transformParams;
     f[0] = transformParams.opacity;
     u[1] = 0;
     f[2] = transformParams.posX;
@@ -77,35 +78,54 @@ export class TransformPipeline extends AbstractPipeline {
     f[22] = 0;
     f[23] = 0;
 
-    this.builder.pushBufferDataFor(TRANSFORM_LAYER_UNIFORM_NAME, this.uniformBufferData, 0);
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniformBufferData);
   }
 
   static create(device: GPUDevice, colorFormat: GPUTextureFormat = 'rgba8unorm'): TransformPipeline {
-    const builder = new RenderPipelineBuilder(videoTransformSource as string, device);
-    const uniformBuffer = builder.setBufferDataDescriptor(TRANSFORM_LAYER_UNIFORM_NAME, {
+    const shaderModule = device.createShaderModule({
+      label: 'video-transform',
+      code: videoTransformSource as string,
+    });
+    const uniformBuffer = device.createBuffer({
       label: 'layer-uniform',
       size: LAYER_UNIFORM_BYTES,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    builder.setBindingGroupDataDescriptor([
-      {binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
-      {binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {}},
-      {
-        binding: 2,
-        visibility: GPUShaderStage.FRAGMENT,
-        buffer: {type: 'uniform', minBindingSize: LAYER_UNIFORM_BYTES},
+    const bindGroupLayout = device.createBindGroupLayout({
+      label: 'video-transform-layout',
+      entries: [
+        {binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {}},
+        {binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {}},
+        {
+          binding: 2,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: {type: 'uniform', minBindingSize: LAYER_UNIFORM_BYTES},
+        },
+      ],
+    });
+    const pipeline = device.createRenderPipeline({
+      label: 'video-transform-pipeline',
+      layout: device.createPipelineLayout({bindGroupLayouts: [bindGroupLayout]}),
+      vertex: {module: shaderModule, entryPoint: 'vs_main'},
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fs_main',
+        targets: [{format: colorFormat}],
       },
-    ]);
-    const pipeline = builder.createPipeline('vs_main', 'fs_main', colorFormat);
-    return new TransformPipeline(builder, pipeline, uniformBuffer);
+      primitive: {topology: 'triangle-list'},
+    });
+    return new TransformPipeline(device, bindGroupLayout, pipeline, uniformBuffer);
   }
 
   gpuRender(params: GpuRenderParams): GPUTextureView {
-    const bindGroup = this.builder.pushBindingGroupData([
-      {binding: 0, resource: params.sampler},
-      {binding: 1, resource: params.inputView},
-      {binding: 2, resource: {buffer: this.uniformBuffer}},
-    ]);
+    const bindGroup = this.device.createBindGroup({
+      layout: this.bindGroupLayout,
+      entries: [
+        {binding: 0, resource: params.sampler},
+        {binding: 1, resource: params.inputView},
+        {binding: 2, resource: {buffer: this.uniformBuffer}},
+      ],
+    });
     const pass = params.encoder.beginRenderPass({
       colorAttachments: [
         {
